@@ -304,99 +304,6 @@ sleep 1
     sudo minicom -b 115200 -D /dev/"$ttyUSB" -S script.txt &>/dev/null
 }
 
-function clear_modem_firmware() {
-    echo '---------------------------------------------'
-    echo 'Clear modem firmware:'
-    echo '---------------------------------------------'
-    # cat the serial port to monitor output and commands. cat will exit when AT!RESET kicks off.
-    sudo cat /dev/"$ttyUSB" 2>&1 | tee -a modem.log &  
-    # Clear Previous PRI/FW Entries
-    echo 'send AT
-send AT!IMAGE=0
-sleep 1
-send AT!IMAGE?
-sleep 1
-! pkill cat
-sleep 1
-! pkill minicom
-' > script.txt
-    sudo minicom -b 115200 -D /dev/"$ttyUSB" -S script.txt &>/dev/null
-}
-
-function download_modem_firmware() {
-    # Find latest 7455 firmware and download it
-    if [[ -z $SWI9X30C_ZIP ]]; then
-        echo '---------------------------------------------'
-        echo 'Download lastest generic firmware:'
-        echo '---------------------------------------------'
-        SWI9X30C_URL=$(curl -s https://source.sierrawireless.com/resources/airprime/minicard/74xx/em_mc74xx-approved-fw-packages/ 2>/dev/null | grep 'GCF Approved' -B4 | grep '7455' | sed 's/,-d-,/./g' | grep -iPo 'href="\K.+/swi9x30c[_0-9.]+_generic_[_0-9.]+' | tail -n1)
-        SWI9X30C_ZIP=${SWI9X30C_URL##*/}
-        SWI9X30C_ZIP="${SWI9X30C_ZIP^^}"'zip'
-    fi
-    SWI9X30C_URL="https://source.sierrawireless.com${SWI9X30C_URL}zip"
-    SWI9X30C_LENGTH=$(curl -sI "$SWI9X30C_URL" | grep -iPo '^Content-Length[^0-9]+\K[0-9]+')
-
-    # If remote file size is less than 40MiB, something went wrong, exit.
-    if [[ $SWI9X30C_LENGTH -lt 40000000 ]]; then
-        printf "${CYAN}---${NC}\n"
-        printf "Download of ${CYAN}$SWI9X30C_ZIP${NC} failed.\nFile size on server is too small, something is wrong, exiting...\n"
-        printf "Attempted download URL was: $SWI9X30C_URL\n"
-        printf "curl info:\n"
-        curl -sI "$SWI9X30C_URL"
-        printf "${CYAN}---${NC}\n"
-        exit
-    fi
-
-    if [[ $SWI9X30C_LENGTH -eq $(stat --printf="%s" "$SWI9X30C_ZIP" 2>/dev/null) ]]; then
-        echo "Already downloaded $SWI9X30C_ZIP..."
-    else
-        echo "Downloading $SWI9X30C_URL"
-        curl -o "$SWI9X30C_ZIP" "$SWI9X30C_URL"
-    fi
-
-    # If download size does not match what server says, exit:
-    if [[ $SWI9X30C_LENGTH -ne $(stat --printf="%s" "$SWI9X30C_ZIP" 2>/dev/null) ]]; then
-        printf "${CYAN}---${NC}\n"
-        printf "Download of ${CYAN}$SWI9X30C_ZIP${NC} failed.\nDownloaded file size is inconsistent with server, exiting...\n"
-        printf "${CYAN}---${NC}\n"
-        exit
-    fi
-
-    # Cleanup old CWE/NVUs
-    rm -f ./*.cwe ./*.nvu 2>/dev/null
-
-    # Unzip SWI9X30C, force overwrite
-    unzip -o "$SWI9X30C_ZIP"
-}
-
-function flash_modem_firmware() {
-    echo '---------------------------------------------'
-    echo 'Flashing firmware:'
-    echo '---------------------------------------------'
-    # Kill cat processes used for monitoring status, if it hasnt already exited
-    sudo pkill -9 cat &>/dev/null
-
-    printf "${CYAN}---${NC}\n"
-    echo "Flashing $SWI9X30C_CWE onto Generic Sierra Modem..."
-    sleep 5
-    qmi-firmware-update --reset -d "$deviceid"
-    get_modem_bootloader_deviceid
-    qmi-firmware-update --update-download -d "$deviceid" "$SWI9X30C_CWE" "$SWI9X30C_NVU"
-    rc=$?
-    if [[ $rc != 0 ]]
-    then
-        echo "Firmware Update failed, exiting..."
-        exit $rc
-    else
-        echo "Firmware Update complete, rebooting modem..."
-        sleep 5
-        qmi-firmware-update --reset -d "$deviceid"
-        sleep 5
-        get_modem_deviceid
-        echo "Modem rebooted, waiting for it to come back online..."
-        sleep 5
-    fi
-}
 
 function set_modem_settings() {
     echo '---------------------------------------------'
@@ -578,21 +485,6 @@ get_modem_deviceid
 
 [[ $get_modem_settings_trigger ]] && get_modem_settings
 
-if [[ $clear_modem_firmware_trigger ]]; then
-  clear_modem_firmware
-  get_modem_deviceid
-fi
-
-[[ $download_modem_firmware_trigger ]] && download_modem_firmware
-
-SWI9X30C_CWE=$(find . -maxdepth 1 -type f -iregex '.*SWI9X30C[0-9_.]+\.cwe' | cut -c 3- | tail -n1)
-SWI9X30C_NVU=$(find . -maxdepth 1 -type f -iregex '.*SWI9X30C[0-9_.]+generic[0-9_.]+\.nvu' | cut -c 3- | tail -n1)
-
-AT_PRIID_STRING=$(strings "$SWI9X30C_NVU" | grep '^9999999_.*_SWI9X30C_' | sort -u | head -1)
-AT_PRIID_PN="$(echo "$AT_PRIID_STRING" | awk -F'_' '{print $2}')"
-AT_PRIID_REV="$(echo "$AT_PRIID_STRING" | grep -Eo '[0-9]{3}\.[0-9]{3}')"
-
-[[ $flash_modem_firmware_trigger ]] && flash_modem_firmware
 [[ $set_modem_settings_trigger ]] && set_modem_settings
 [[ $verbose_trigger ]] && display_variables
 
