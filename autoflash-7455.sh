@@ -137,6 +137,9 @@ if [[ all_functions_trigger -eq 1 ]]; then
 fi
 
 function display_variables() {
+    echo '---------------------------------------------'
+    echo 'Display settings:'
+    echo '---------------------------------------------'
     echo "AT_USBSPEED=$AT_USBSPEED"
     echo "AT_USBCOMP=$AT_USBCOMP"
     echo "AT_SELRAT=$AT_SELRAT"
@@ -156,6 +159,9 @@ function display_variables() {
 }
 
 function set_options() {
+    echo '---------------------------------------------'
+    echo 'Set modem options:'
+    echo '---------------------------------------------'
     # See if QMI desired, otherwise default to MBIM
     if [[ ${AT_USBCOMP^^} =~ ^QMI$|^6$ ]]; then
         echo 'Setting QMI Mode for Modem'
@@ -199,6 +205,9 @@ function set_options() {
 }
 
 function get_modem_deviceid() {
+    echo '---------------------------------------------'
+    echo 'Get modem device id:'
+    echo '---------------------------------------------'
     deviceid=''
     while [ -z $deviceid ]
     do
@@ -212,6 +221,9 @@ function get_modem_deviceid() {
 }
 
 function get_modem_bootloader_deviceid() {
+    echo '---------------------------------------------'
+    echo 'Get modem bootloader device id:'
+    echo '---------------------------------------------'
     deviceid=''
     while [ -z $deviceid ]
     do
@@ -223,6 +235,9 @@ function get_modem_bootloader_deviceid() {
 }
 
 function reset_modem {
+    echo '---------------------------------------------'
+    echo 'Reset modem:'
+    echo '---------------------------------------------'
     get_modem_deviceid
 
     # Reset Modem
@@ -232,6 +247,9 @@ function reset_modem {
 }
 
 function get_modem_settings() {
+    echo '---------------------------------------------'
+    echo 'Get modem settings:'
+    echo '---------------------------------------------'
     # cat the serial port to monitor output and commands. cat will exit when AT!RESET kicks off.
     sudo cat /dev/"$ttyUSB" 2>&1 | tee -a modem.log &  
 
@@ -287,6 +305,9 @@ sleep 1
 }
 
 function clear_modem_firmware() {
+    echo '---------------------------------------------'
+    echo 'Clear modem firmware:'
+    echo '---------------------------------------------'
     # cat the serial port to monitor output and commands. cat will exit when AT!RESET kicks off.
     sudo cat /dev/"$ttyUSB" 2>&1 | tee -a modem.log &  
     # Clear Previous PRI/FW Entries
@@ -305,7 +326,10 @@ sleep 1
 function download_modem_firmware() {
     # Find latest 7455 firmware and download it
     if [[ -z $SWI9X30C_ZIP ]]; then
-        SWI9X30C_URL=$(curl -s https://source.sierrawireless.com/resources/airprime/minicard/74xx/em_mc74xx-approved-fw-packages/ 2>/dev/null | grep 'GCF Approved' -B1 | grep '7455' | sed 's/,-d-,/./g' | grep -iPo 'href="\K.+/swi9x30c[_0-9.]+_generic_[_0-9.]+' | tail -n1)
+        echo '---------------------------------------------'
+        echo 'Download lastest generic firmware:'
+        echo '---------------------------------------------'
+        SWI9X30C_URL=$(curl -s https://source.sierrawireless.com/resources/airprime/minicard/74xx/em_mc74xx-approved-fw-packages/ 2>/dev/null | grep 'GCF Approved' -B4 | grep '7455' | sed 's/,-d-,/./g' | grep -iPo 'href="\K.+/swi9x30c[_0-9.]+_generic_[_0-9.]+' | tail -n1)
         SWI9X30C_ZIP=${SWI9X30C_URL##*/}
         SWI9X30C_ZIP="${SWI9X30C_ZIP^^}"'zip'
     fi
@@ -346,6 +370,9 @@ function download_modem_firmware() {
 }
 
 function flash_modem_firmware() {
+    echo '---------------------------------------------'
+    echo 'Flashing firmware:'
+    echo '---------------------------------------------'
     # Kill cat processes used for monitoring status, if it hasnt already exited
     sudo pkill -9 cat &>/dev/null
 
@@ -360,10 +387,22 @@ function flash_modem_firmware() {
     then
         echo "Firmware Update failed, exiting..."
         exit $rc
+    else
+        echo "Firmware Update complete, rebooting modem..."
+        sleep 5
+        qmi-firmware-update --reset -d "$deviceid"
+        sleep 5
+        get_modem_deviceid
+        echo "Modem rebooted, waiting for it to come back online..."
+        sleep 5
     fi
 }
 
 function set_modem_settings() {
+    echo '---------------------------------------------'
+    echo 'Set modem settings:'
+    echo '---------------------------------------------'
+    sleep 5
     # cat the serial port to monitor output and commands. cat will exit when AT!RESET kicks off.
     sudo cat /dev/"$ttyUSB" 2>&1 | tee -a modem.log &  
 
@@ -420,6 +459,9 @@ EOF
 }
 
 function script_prechecks() {
+    echo '---------------------------------------------'
+    echo 'Precheck:'
+    echo '---------------------------------------------'
     printf "${CYAN}---${NC}\n"
     echo 'Searching for EM7455/MC7455 USB modems...'
     modemcount=$(lsusb | grep -c -i -E '1199:9071|1199:9079|413C:81B6')
@@ -469,6 +511,9 @@ function script_prechecks() {
 }
 
 function set_swi_setusbcomp() {
+    echo '---------------------------------------------'
+    echo 'Set swi setusbcomp:'
+    echo '---------------------------------------------'
     # Modem Mode Switch to usbcomp=8 (DM   NMEA  AT    MBIM)
     printf "${CYAN}---${NC}\n"
     echo "Running Modem Mode Switch to usbcomp=$swi_usbcomp"
@@ -498,6 +543,9 @@ EOF
 }
 
 function script_cleanup() {
+    echo '---------------------------------------------'
+    echo 'Script cleanup:'
+    echo '---------------------------------------------'
     # Restart ModemManager
     systemctl enable ModemManager &>/dev/null
     systemctl start ModemManager &>/dev/null
